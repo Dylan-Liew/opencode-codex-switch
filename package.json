@@ -1,5 +1,5 @@
 {
-  "name": "opencode-codex-swtich",
+  "name": "opencode-codex-switch",
   "version": "0.1.0",
   "description": "Opencode plugin for managing multiple Codex OAuth",
   "type": "module",
