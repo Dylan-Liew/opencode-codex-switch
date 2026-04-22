@@ -1,0 +1,52 @@
+{
+  "name": "opencode-codex-swtich",
+  "version": "0.1.0",
+  "description": "Opencode plugin for managing multiple Codex OAuth",
+  "type": "module",
+  "main": "./index.ts",
+  "module": "./index.ts",
+  "exports": {
+    ".": {
+      "import": "./index.ts"
+    },
+    "./server": {
+      "import": "./src/server.ts"
+    },
+    "./tui": {
+      "import": "./src/tui.tsx"
+    }
+  },
+  "files": [
+    "index.ts",
+    "src"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Dylan-Liew/opencode-codex-switch.git"
+  },
+  "homepage": "https://github.com/Dylan-Liew/opencode-codex-switch#readme",
+  "bugs": {
+    "url": "https://github.com/Dylan-Liew/opencode-codex-switch/issues"
+  },
+  "keywords": [
+    "opencode",
+    "plugin",
+    "codex",
+    "openai",
+    "oauth",
+    "tui"
+  ],
+  "author": "Dylan Liew",
+  "license": "MIT",
+  "scripts": {
+    "test": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "1.3.17",
+    "@opentui/core": "^0.1.96",
+    "@opentui/solid": "^0.1.96",
+    "@types/node": "^24.3.0",
+    "@types/bun": "latest",
+    "typescript": "^5.9.3"
+  }
+}
