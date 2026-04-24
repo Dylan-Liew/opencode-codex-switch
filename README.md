@@ -19,10 +19,7 @@ For a global manual install, add the plugin to both `~/.config/opencode/opencode
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-codex-switch"],
-  "codex-switch": {
-    "probeOpenAIAuthHook": true
-  }
+  "plugin": ["opencode-codex-switch"]
 }
 ```
 
@@ -35,7 +32,7 @@ For a global manual install, add the plugin to both `~/.config/opencode/opencode
 }
 ```
 
-`probeOpenAIAuthHook` enables the browser-based add-account flow for OpenAI inside the plugin.
+The add-account flow uses OpenCode's built-in OpenAI/Codex OAuth methods.
 
 ## Use It
 
@@ -47,7 +44,7 @@ Open the account switcher with either:
 Inside the dialog:
 
 - `Enter` switches to the selected saved account
-- `a` starts the browser flow to add another OpenAI account
+- `a` starts OpenCode's OpenAI/Codex OAuth flow to add another account
 - `Ctrl+D` deletes the selected saved account
 
 Each row shows the account email when available, and falls back to the OpenAI account ID when email is unavailable.
@@ -56,8 +53,8 @@ Each row shows the account email when available, and falls back to the OpenAI ac
 
 The plugin has two parts that work together:
 
-- Server plugin: intercepts `/switch-codex` and exposes the OpenAI auth hook used for adding accounts
-- TUI plugin: renders the account picker and handles switching, adding, and deleting accounts
+- Server plugin: intercepts `/switch-codex` and forwards it to the TUI command
+- TUI plugin: renders the account picker and handles switching, adding, and deleting accounts through OpenCode's built-in OAuth flow
 
 Saved accounts are stored in the local OpenCode data directory and the active account is applied through OpenCode's auth client when you switch.
 
@@ -65,7 +62,7 @@ Saved accounts are stored in the local OpenCode data directory and the active ac
 
 - OpenAI-only: this plugin is currently built for OpenAI OAuth account switching
 - Local storage: saved accounts are written to OpenCode's local data directory
-- Browser required for add-account: adding a new account uses the OpenAI OAuth browser flow
+- Browser required for add-account: adding a new account uses OpenCode's OpenAI/Codex OAuth browser flow
 
 ## License
 

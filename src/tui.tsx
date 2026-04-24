@@ -4,13 +4,13 @@ import { RGBA, TextAttributes } from "@opentui/core";
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid";
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui";
 import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js";
-import { getAccountByID, readStore, removeAccount, setActiveAccount, writeStore } from "./store.ts";
+import { getAccountByID, readStore, removeAccount, setActiveAccount, syncCurrentAuth, writeStore } from "./store.ts";
 import type { AccountView, StoredAccount } from "./types.ts";
 import { getCurrentOpenAIOAuth, sameOAuthRecord } from "./utils/auth.ts";
-import { openAIAuthMethodLabel } from "./auth-probe.ts";
 
 const PLUGIN_ID = "opencode-codex-switch";
 const ACCOUNT_COMMAND_OPEN = "plugin.codex-switch.open";
+const OPENAI_BROWSER_METHOD_LABEL = "ChatGPT Pro/Plus (browser)";
 
 function describeAccount(account: StoredAccount): string {
   return account.email ?? account.auth.accountId ?? "Email unavailable";
@@ -111,20 +111,36 @@ async function reopenAccountsDialog(api: TuiPluginApi): Promise<void> {
   api.ui.dialog.replace(() => <AccountsDialog api={api} />);
 }
 
-async function getPluginOpenAIMethodIndex(api: TuiPluginApi): Promise<number | undefined> {
+async function saveCurrentOpenAIAccount(): Promise<boolean> {
+  const currentAuth = await getCurrentOpenAIOAuth();
+  if (!currentAuth) {
+    return false;
+  }
+
+  await writeStore(syncCurrentAuth(await readStore(), currentAuth));
+  return true;
+}
+
+async function getOpenAIMethod(api: TuiPluginApi): Promise<{ index: number; label: string } | undefined> {
   const result = await api.client.provider.auth();
   const methods = result.data?.openai;
   if (result.error || !methods) {
     return undefined;
   }
 
-  const index = methods.findIndex((method) => method.label === openAIAuthMethodLabel);
-  return index >= 0 ? index : undefined;
+  const browserIndex = methods.findIndex((method) => method.type === "oauth" && method.label === OPENAI_BROWSER_METHOD_LABEL);
+  if (browserIndex >= 0) {
+    return { index: browserIndex, label: methods[browserIndex]!.label };
+  }
+
+  const oauthIndex = methods.findIndex((method) => method.type === "oauth");
+  return oauthIndex >= 0 ? { index: oauthIndex, label: methods[oauthIndex]!.label } : undefined;
 }
 
 function AddAccountAutoMethod(props: {
   api: TuiPluginApi;
   methodIndex: number;
+  methodLabel: string;
   url: string;
   instructions: string;
 }) {
@@ -138,6 +154,8 @@ function AddAccountAutoMethod(props: {
 
     if (result.error) {
       props.api.ui.toast({ message: "Failed to add account", variant: "error", duration: 3000 });
+    } else if (!(await saveCurrentOpenAIAccount())) {
+      props.api.ui.toast({ message: "Added auth, but failed to save account", variant: "error", duration: 3000 });
     }
 
     await reopenAccountsDialog(props.api);
@@ -147,7 +165,7 @@ function AddAccountAutoMethod(props: {
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text fg={theme.text} attributes={TextAttributes.BOLD}>
-          {openAIAuthMethodLabel}
+          {props.methodLabel}
         </text>
         <text fg={theme.textMuted} onMouseUp={() => props.api.ui.dialog.clear()}>
           esc
@@ -161,15 +179,15 @@ function AddAccountAutoMethod(props: {
 }
 
 async function startAddAccountFlow(api: TuiPluginApi): Promise<void> {
-  const methodIndex = await getPluginOpenAIMethodIndex(api);
-  if (methodIndex === undefined) {
-    api.ui.toast({ message: "Codex Switch add-account method is unavailable", variant: "error", duration: 3000 });
+  const method = await getOpenAIMethod(api);
+  if (!method) {
+    api.ui.toast({ message: "OpenAI OAuth add-account method is unavailable", variant: "error", duration: 3000 });
     return;
   }
 
   const result = await api.client.provider.oauth.authorize({
     providerID: "openai",
-    method: methodIndex,
+    method: method.index,
   });
 
   if (result.error || !result.data?.url) {
@@ -188,7 +206,8 @@ async function startAddAccountFlow(api: TuiPluginApi): Promise<void> {
     api.ui.dialog.replace(() => (
       <AddAccountAutoMethod
         api={api}
-        methodIndex={methodIndex}
+        methodIndex={method.index}
+        methodLabel={method.label}
         url={result.data!.url}
         instructions={result.data!.instructions}
       />
@@ -199,7 +218,7 @@ async function startAddAccountFlow(api: TuiPluginApi): Promise<void> {
   const DialogPrompt = api.ui.DialogPrompt;
   api.ui.dialog.replace(() => (
     <DialogPrompt
-      title={openAIAuthMethodLabel}
+      title={method.label}
       placeholder="Authorization code"
       onCancel={() => {
         void reopenAccountsDialog(api);
@@ -207,12 +226,17 @@ async function startAddAccountFlow(api: TuiPluginApi): Promise<void> {
       onConfirm={async (value) => {
         const callback = await api.client.provider.oauth.callback({
           providerID: "openai",
-          method: methodIndex,
+          method: method.index,
           code: value,
         });
 
         if (callback.error) {
           api.ui.toast({ message: "Invalid authorization code", variant: "error", duration: 3000 });
+          return;
+        }
+
+        if (!(await saveCurrentOpenAIAccount())) {
+          api.ui.toast({ message: "Added auth, but failed to save account", variant: "error", duration: 3000 });
           return;
         }
 

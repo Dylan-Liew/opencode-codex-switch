@@ -1,5 +1,4 @@
-import type { Hooks, PluginInput, PluginModule, PluginOptions } from "@opencode-ai/plugin";
-import { getOpenAIAuthProbe, type CodexSwitchOptions } from "./auth-probe.ts";
+import type { Hooks, PluginInput, PluginModule } from "@opencode-ai/plugin";
 
 const PLUGIN_ID = "opencode-codex-switch";
 const ACCOUNT_COMMAND_OPEN = "plugin.codex-switch.open";
@@ -10,15 +9,10 @@ function isAccountCommand(command: string): boolean {
   return normalized === "switch-codex";
 }
 
-export async function CodexSwitchPlugin(
-  input: PluginInput,
-  options?: PluginOptions,
-): Promise<Hooks> {
+export async function CodexSwitchPlugin(input: PluginInput): Promise<Hooks> {
   const client = input.client;
-  const authProbe = getOpenAIAuthProbe(input, options as CodexSwitchOptions | undefined);
 
   return {
-    ...(authProbe ? { auth: authProbe } : {}),
     "command.execute.before": async (input, output) => {
       if (!isAccountCommand(input.command)) {
         return;
