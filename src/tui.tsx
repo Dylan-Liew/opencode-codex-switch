@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { spawn } from "child_process";
-import { RGBA, TextAttributes } from "@opentui/core";
-import { useKeyboard, useTerminalDimensions } from "@opentui/solid";
+import { RGBA, TextAttributes, type KeyEvent } from "@opentui/core";
+import { useTerminalDimensions } from "@opentui/solid";
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui";
 import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js";
 import { getAccountByID, readStore, removeAccount, setActiveAccount, syncCurrentAuth, writeStore } from "./store.ts";
@@ -18,7 +18,7 @@ function describeAccount(account: StoredAccount): string {
 
 async function getAccountViews(): Promise<AccountView[]> {
   const [store, currentAuth] = await Promise.all([readStore(), getCurrentOpenAIOAuth()]);
-  const currentStore = syncCurrentAuth(store, currentAuth);
+  const currentStore = syncCurrentAuth(store, currentAuth, { activate: false });
   if (currentStore !== store) {
     await writeStore(currentStore);
   }
@@ -271,10 +271,6 @@ function AccountsDialog(props: { api: TuiPluginApi }) {
     setSelectedIndex((current) => Math.max(0, Math.min(current, Math.max(0, result.length - 1))));
   };
 
-  const refresh = async () => {
-    await reopenAccountsDialog(props.api);
-  };
-
   onMount(() => {
     void loadViews();
   });
@@ -283,58 +279,66 @@ function AccountsDialog(props: { api: TuiPluginApi }) {
     props.api.ui.dialog.setSize(dimensions().width >= 120 ? "large" : "medium");
   });
 
-  useKeyboard((event) => {
+  const handleKeyDown = (event: KeyEvent) => {
     if (event.eventType !== "press" || event.repeated || busy()) {
       return;
     }
 
-    if (event.name === "down") {
+    const key = event.name.toLowerCase();
+
+    if (key === "down" || key === "arrowdown") {
       event.preventDefault();
+      event.stopPropagation();
       setSelectedIndex((current) => Math.min(current + 1, Math.max(0, views().length - 1)));
       return;
     }
 
-    if (event.name === "up") {
+    if (key === "up" || key === "arrowup") {
       event.preventDefault();
+      event.stopPropagation();
       setSelectedIndex((current) => Math.max(current - 1, 0));
       return;
     }
 
-    if (event.name === "return") {
+    if (key === "return" || key === "enter") {
       const current = selected()?.account;
       if (!current) {
         return;
       }
 
       event.preventDefault();
+      event.stopPropagation();
       setBusy(true);
       void switchAccount(props.api, current.id)
-        .then(() => refresh())
+        .then(() => reopenAccountsDialog(props.api))
         .finally(() => setBusy(false));
       return;
     }
 
-    if (event.ctrl && event.name === "d") {
+    if (!event.ctrl && !event.meta && !event.option && key === "a") {
+      event.preventDefault();
+      event.stopPropagation();
+      setBusy(true);
+      void startAddAccountFlow(props.api).finally(() => setBusy(false));
+      return;
+    }
+
+    if (event.ctrl && key === "d") {
       const current = selected()?.account;
       if (!current) {
         return;
       }
 
       event.preventDefault();
-      void deleteSelectedAccount(props.api, current, refresh);
-      return;
+      event.stopPropagation();
+      void deleteSelectedAccount(props.api, current, () => {
+        void reopenAccountsDialog(props.api);
+      });
     }
-
-    if (!event.ctrl && !event.meta && !event.option && event.name === "a") {
-      event.preventDefault();
-      setBusy(true);
-      void startAddAccountFlow(props.api).finally(() => setBusy(false));
-      return;
-    }
-  });
+  };
 
   return (
-    <box width="100%" flexDirection="column" gap={0}>
+    <box width="100%" flexDirection="column" gap={0} focusable focused onKeyDown={handleKeyDown}>
       <box paddingLeft={4} paddingRight={4} paddingBottom={1} flexDirection="column" gap={1}>
         <box flexDirection="row" justifyContent="space-between">
           <box flexDirection="column" gap={0}>

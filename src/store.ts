@@ -125,11 +125,16 @@ export function getAccountByID(store: AccountStore, accountID: string | undefine
   return store.accounts.find((account) => account.id === accountID);
 }
 
-export function syncCurrentAuth(store: AccountStore, auth: OAuthRecord | undefined): AccountStore {
+export function syncCurrentAuth(
+  store: AccountStore,
+  auth: OAuthRecord | undefined,
+  options: { activate?: boolean } = {},
+): AccountStore {
   if (!auth) {
     return store;
   }
 
+  const activate = options.activate ?? true;
   const existing = store.accounts.find((account) => sameAccountIdentity(account.auth, auth));
   if (existing) {
     const email = existing.email ?? inferEmailFromOAuth(auth);
@@ -140,7 +145,7 @@ export function syncCurrentAuth(store: AccountStore, auth: OAuthRecord | undefin
     const now = new Date().toISOString();
     return {
       ...store,
-      activeAccountID: existing.id,
+      activeAccountID: activate ? existing.id : store.activeAccountID,
       accounts: store.accounts.map((account) =>
         account.id === existing.id
           ? {
