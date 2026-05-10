@@ -1,9 +1,9 @@
 /** @jsxImportSource @opentui/solid */
 import { spawn } from "child_process";
-import { RGBA, TextAttributes, type KeyEvent } from "@opentui/core";
-import { useTerminalDimensions } from "@opentui/solid";
+import { MouseButton, RGBA, TextAttributes, type KeyEvent, type MouseEvent, type Renderable } from "@opentui/core";
+import { useKeyboard, useTerminalDimensions } from "@opentui/solid";
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui";
-import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { getAccountByID, readStore, removeAccount, setActiveAccount, syncCurrentAuth, writeStore } from "./store.ts";
 import type { AccountView, StoredAccount } from "./types.ts";
 import { getCurrentOpenAIOAuth, sameOAuthRecord } from "./utils/auth.ts";
@@ -262,8 +262,59 @@ function AccountsDialog(props: { api: TuiPluginApi }) {
   const [views, setViews] = createSignal<AccountView[]>([]);
   const [selectedIndex, setSelectedIndex] = createSignal(0);
   const [busy, setBusy] = createSignal(false);
+  const [hoveredAction, setHoveredAction] = createSignal<string | undefined>();
+  const handledKeys = new WeakSet<KeyEvent>();
+  let root: Renderable | undefined;
 
   const selected = createMemo(() => views()[selectedIndex()]);
+
+  const moveSelection = (direction: number) => {
+    setSelectedIndex((current) => Math.max(0, Math.min(current + direction, Math.max(0, views().length - 1))));
+  };
+
+  const switchStoredAccount = (account: StoredAccount | undefined) => {
+    if (!account || busy()) {
+      return;
+    }
+
+    setBusy(true);
+    void switchAccount(props.api, account.id)
+      .then(() => reopenAccountsDialog(props.api))
+      .finally(() => setBusy(false));
+  };
+
+  const switchCurrentAccount = () => switchStoredAccount(selected()?.account);
+
+  const addAccount = () => {
+    if (busy()) {
+      return;
+    }
+
+    setBusy(true);
+    void startAddAccountFlow(props.api).finally(() => setBusy(false));
+  };
+
+  const deleteStoredAccount = (account: StoredAccount | undefined) => {
+    if (!account || busy()) {
+      return;
+    }
+
+    void deleteSelectedAccount(props.api, account, () => {
+      void reopenAccountsDialog(props.api);
+    });
+  };
+
+  const deleteCurrentAccount = () => deleteStoredAccount(selected()?.account);
+
+  const clickPrimary = (event: MouseEvent): boolean => {
+    if (event.button !== MouseButton.LEFT) {
+      return false;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    return true;
+  };
 
   const loadViews = async () => {
     const result = await getAccountViews();
@@ -273,6 +324,13 @@ function AccountsDialog(props: { api: TuiPluginApi }) {
 
   onMount(() => {
     void loadViews();
+    setTimeout(() => {
+      if (!root || root.isDestroyed) {
+        return;
+      }
+
+      root.focus();
+    }, 25);
   });
 
   createEffect(() => {
@@ -280,65 +338,100 @@ function AccountsDialog(props: { api: TuiPluginApi }) {
   });
 
   const handleKeyDown = (event: KeyEvent) => {
-    if (event.eventType !== "press" || event.repeated || busy()) {
+    if (handledKeys.has(event)) {
+      return;
+    }
+
+    if (event.defaultPrevented || event.eventType !== "press" || busy()) {
       return;
     }
 
     const key = event.name.toLowerCase();
 
-    if (key === "down" || key === "arrowdown") {
+    if (props.api.keybind.match("down", event) || key === "down" || key === "arrowdown") {
+      handledKeys.add(event);
       event.preventDefault();
       event.stopPropagation();
-      setSelectedIndex((current) => Math.min(current + 1, Math.max(0, views().length - 1)));
+      moveSelection(1);
       return;
     }
 
-    if (key === "up" || key === "arrowup") {
+    if (props.api.keybind.match("up", event) || key === "up" || key === "arrowup") {
+      handledKeys.add(event);
       event.preventDefault();
       event.stopPropagation();
-      setSelectedIndex((current) => Math.max(current - 1, 0));
+      moveSelection(-1);
       return;
     }
 
     if (key === "return" || key === "enter") {
-      const current = selected()?.account;
-      if (!current) {
+      if (event.repeated) {
         return;
       }
 
+      handledKeys.add(event);
       event.preventDefault();
       event.stopPropagation();
-      setBusy(true);
-      void switchAccount(props.api, current.id)
-        .then(() => reopenAccountsDialog(props.api))
-        .finally(() => setBusy(false));
+      switchCurrentAccount();
       return;
     }
 
     if (!event.ctrl && !event.meta && !event.option && key === "a") {
+      if (event.repeated) {
+        return;
+      }
+
+      handledKeys.add(event);
       event.preventDefault();
       event.stopPropagation();
-      setBusy(true);
-      void startAddAccountFlow(props.api).finally(() => setBusy(false));
+      addAccount();
       return;
     }
 
     if (event.ctrl && key === "d") {
-      const current = selected()?.account;
-      if (!current) {
+      if (event.repeated) {
         return;
       }
 
+      handledKeys.add(event);
       event.preventDefault();
       event.stopPropagation();
-      void deleteSelectedAccount(props.api, current, () => {
-        void reopenAccountsDialog(props.api);
-      });
+      deleteCurrentAccount();
     }
   };
 
+  const disposeKeybinds = props.api.command.register(() => [
+    {
+      title: "Previous Codex account",
+      value: `${ACCOUNT_COMMAND_OPEN}.previous`,
+      category: "Plugin",
+      hidden: true,
+      keybind: "dialog.select.prev",
+      onSelect: () => moveSelection(-1),
+    },
+    {
+      title: "Next Codex account",
+      value: `${ACCOUNT_COMMAND_OPEN}.next`,
+      category: "Plugin",
+      hidden: true,
+      keybind: "dialog.select.next",
+      onSelect: () => moveSelection(1),
+    },
+    {
+      title: "Select Codex account",
+      value: `${ACCOUNT_COMMAND_OPEN}.select`,
+      category: "Plugin",
+      hidden: true,
+      keybind: "dialog.select.submit",
+      onSelect: switchCurrentAccount,
+    },
+  ]);
+  onCleanup(disposeKeybinds);
+
+  useKeyboard(handleKeyDown);
+
   return (
-    <box width="100%" flexDirection="column" gap={0} focusable focused onKeyDown={handleKeyDown}>
+    <box width="100%" flexDirection="column" gap={0} focusable focused onKeyDown={handleKeyDown} ref={(value) => (root = value)}>
       <box paddingLeft={4} paddingRight={4} paddingBottom={1} flexDirection="column" gap={1}>
         <box flexDirection="row" justifyContent="space-between">
           <box flexDirection="column" gap={0}>
@@ -347,9 +440,28 @@ function AccountsDialog(props: { api: TuiPluginApi }) {
             </text>
             <text fg={theme.textMuted}>enter select · a add · ctrl+d delete</text>
           </box>
-          <text fg={theme.textMuted} onMouseUp={() => props.api.ui.dialog.clear()}>
-            esc
-          </text>
+          <box flexDirection="row" gap={2}>
+            <text
+              fg={hoveredAction() === "add" ? theme.text : theme.primary}
+              onMouseOver={() => setHoveredAction("add")}
+              onMouseOut={() => setHoveredAction(undefined)}
+              onMouseUp={(event) => {
+                if (clickPrimary(event)) {
+                  addAccount();
+                }
+              }}
+            >
+              add
+            </text>
+            <text
+              fg={hoveredAction() === "esc" ? theme.text : theme.textMuted}
+              onMouseOver={() => setHoveredAction("esc")}
+              onMouseOut={() => setHoveredAction(undefined)}
+              onMouseUp={() => props.api.ui.dialog.clear()}
+            >
+              esc
+            </text>
+          </box>
         </box>
 
         <Show when={busy()}>
@@ -391,6 +503,19 @@ function AccountsDialog(props: { api: TuiPluginApi }) {
                     paddingTop={0}
                     paddingBottom={0}
                     flexDirection="row"
+                    onMouseMove={() => setSelectedIndex(index())}
+                    onMouseOver={() => setSelectedIndex(index())}
+                    onMouseDown={(event) => {
+                      if (clickPrimary(event)) {
+                        setSelectedIndex(index());
+                      }
+                    }}
+                    onMouseUp={(event) => {
+                      if (clickPrimary(event)) {
+                        setSelectedIndex(index());
+                        switchStoredAccount(view.account);
+                      }
+                    }}
                   >
                     <box width={1} backgroundColor={isSelected() ? theme.primary : theme.borderSubtle} />
                     <box
@@ -405,9 +530,24 @@ function AccountsDialog(props: { api: TuiPluginApi }) {
                       backgroundColor={cardBackground()}
                     >
                       <text fg={isSelected() ? theme.text : theme.textMuted}>{describeAccount(view.account)}</text>
-                      <Show when={view.isActive}>
-                        <text fg={theme.primary}>active</text>
-                      </Show>
+                      <box flexDirection="row" gap={2}>
+                        <Show when={view.isActive}>
+                          <text fg={theme.primary}>active</text>
+                        </Show>
+                        <text
+                          fg={hoveredAction() === `delete:${view.account.id}` ? theme.text : theme.textMuted}
+                          onMouseOver={() => setHoveredAction(`delete:${view.account.id}`)}
+                          onMouseOut={() => setHoveredAction(undefined)}
+                          onMouseUp={(event) => {
+                            if (clickPrimary(event)) {
+                              setSelectedIndex(index());
+                              deleteStoredAccount(view.account);
+                            }
+                          }}
+                        >
+                          delete
+                        </text>
+                      </box>
                     </box>
                   </box>
                 );
