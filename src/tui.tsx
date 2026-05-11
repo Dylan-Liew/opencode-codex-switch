@@ -342,11 +342,39 @@ function AccountsDialog(props: { api: TuiPluginApi }) {
       return;
     }
 
-    if (event.defaultPrevented || event.eventType !== "press" || busy()) {
+    if (event.eventType !== "press" || busy()) {
       return;
     }
 
     const key = event.name.toLowerCase();
+
+    if (!event.ctrl && !event.meta && !event.option && key === "a") {
+      if (event.repeated) {
+        return;
+      }
+
+      handledKeys.add(event);
+      event.preventDefault();
+      event.stopPropagation();
+      addAccount();
+      return;
+    }
+
+    if (event.ctrl && key === "d") {
+      if (event.repeated) {
+        return;
+      }
+
+      handledKeys.add(event);
+      event.preventDefault();
+      event.stopPropagation();
+      deleteCurrentAccount();
+      return;
+    }
+
+    if (event.defaultPrevented) {
+      return;
+    }
 
     if (props.api.keybind.match("down", event) || key === "down" || key === "arrowdown") {
       handledKeys.add(event);
@@ -376,28 +404,7 @@ function AccountsDialog(props: { api: TuiPluginApi }) {
       return;
     }
 
-    if (!event.ctrl && !event.meta && !event.option && key === "a") {
-      if (event.repeated) {
-        return;
-      }
-
-      handledKeys.add(event);
-      event.preventDefault();
-      event.stopPropagation();
-      addAccount();
-      return;
-    }
-
-    if (event.ctrl && key === "d") {
-      if (event.repeated) {
-        return;
-      }
-
-      handledKeys.add(event);
-      event.preventDefault();
-      event.stopPropagation();
-      deleteCurrentAccount();
-    }
+    return;
   };
 
   const disposeKeybinds = props.api.command.register(() => [
@@ -424,6 +431,22 @@ function AccountsDialog(props: { api: TuiPluginApi }) {
       hidden: true,
       keybind: "dialog.select.submit",
       onSelect: switchCurrentAccount,
+    },
+    {
+      title: "Add Codex account",
+      value: `${ACCOUNT_COMMAND_OPEN}.add`,
+      category: "Plugin",
+      hidden: true,
+      keybind: "a",
+      onSelect: addAccount,
+    },
+    {
+      title: "Delete Codex account",
+      value: `${ACCOUNT_COMMAND_OPEN}.delete`,
+      category: "Plugin",
+      hidden: true,
+      keybind: "ctrl+d",
+      onSelect: deleteCurrentAccount,
     },
   ]);
   onCleanup(disposeKeybinds);
