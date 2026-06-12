@@ -376,7 +376,7 @@ function AccountsDialog(props: { api: TuiPluginApi }) {
       return;
     }
 
-    if (props.api.keybind.match("down", event) || key === "down" || key === "arrowdown") {
+    if (key === "down" || key === "arrowdown") {
       handledKeys.add(event);
       event.preventDefault();
       event.stopPropagation();
@@ -384,7 +384,7 @@ function AccountsDialog(props: { api: TuiPluginApi }) {
       return;
     }
 
-    if (props.api.keybind.match("up", event) || key === "up" || key === "arrowup") {
+    if (key === "up" || key === "arrowup") {
       handledKeys.add(event);
       event.preventDefault();
       event.stopPropagation();
@@ -407,48 +407,50 @@ function AccountsDialog(props: { api: TuiPluginApi }) {
     return;
   };
 
-  const disposeKeybinds = props.api.command.register(() => [
-    {
-      title: "Previous Codex account",
-      value: `${ACCOUNT_COMMAND_OPEN}.previous`,
-      category: "Plugin",
-      hidden: true,
-      keybind: "dialog.select.prev",
-      onSelect: () => moveSelection(-1),
-    },
-    {
-      title: "Next Codex account",
-      value: `${ACCOUNT_COMMAND_OPEN}.next`,
-      category: "Plugin",
-      hidden: true,
-      keybind: "dialog.select.next",
-      onSelect: () => moveSelection(1),
-    },
-    {
-      title: "Select Codex account",
-      value: `${ACCOUNT_COMMAND_OPEN}.select`,
-      category: "Plugin",
-      hidden: true,
-      keybind: "dialog.select.submit",
-      onSelect: switchCurrentAccount,
-    },
-    {
-      title: "Add Codex account",
-      value: `${ACCOUNT_COMMAND_OPEN}.add`,
-      category: "Plugin",
-      hidden: true,
-      keybind: "a",
-      onSelect: addAccount,
-    },
-    {
-      title: "Delete Codex account",
-      value: `${ACCOUNT_COMMAND_OPEN}.delete`,
-      category: "Plugin",
-      hidden: true,
-      keybind: "ctrl+d",
-      onSelect: deleteCurrentAccount,
-    },
-  ]);
+  const disposeKeybinds = props.api.keymap.registerLayer({
+    priority: 10,
+    commands: [
+      {
+        name: "dialog.select.prev",
+        title: "Previous Codex account",
+        category: "Dialog",
+        run: () => moveSelection(-1),
+      },
+      {
+        name: "dialog.select.next",
+        title: "Next Codex account",
+        category: "Dialog",
+        run: () => moveSelection(1),
+      },
+      {
+        name: "dialog.select.submit",
+        title: "Select Codex account",
+        category: "Dialog",
+        run: switchCurrentAccount,
+      },
+      {
+        name: `${ACCOUNT_COMMAND_OPEN}.add`,
+        title: "Add Codex account",
+        category: "Dialog",
+        run: addAccount,
+      },
+      {
+        name: `${ACCOUNT_COMMAND_OPEN}.delete`,
+        title: "Delete Codex account",
+        category: "Dialog",
+        run: deleteCurrentAccount,
+      },
+    ],
+    bindings: [
+      ...props.api.tuiConfig.keybinds.gather("dialog.select", [
+        "dialog.select.prev",
+        "dialog.select.next",
+        "dialog.select.submit",
+      ]),
+      { key: "a", cmd: `${ACCOUNT_COMMAND_OPEN}.add`, desc: "Add Codex account" },
+      { key: "ctrl+d", cmd: `${ACCOUNT_COMMAND_OPEN}.delete`, desc: "Delete Codex account" },
+    ],
+  });
   onCleanup(disposeKeybinds);
 
   useKeyboard(handleKeyDown);
@@ -588,17 +590,21 @@ async function openAccountsDialog(api: TuiPluginApi): Promise<void> {
 }
 
 const tui: TuiPlugin = async (api) => {
-  api.command.register(() => [
-    {
-      title: "Switch Codex Account",
-      value: ACCOUNT_COMMAND_OPEN,
-      category: "Plugin",
-      slash: { name: "switch-codex" },
-      onSelect: () => {
-        void openAccountsDialog(api);
+  const disposeCommands = api.keymap.registerLayer({
+    commands: [
+      {
+        namespace: "palette",
+        name: ACCOUNT_COMMAND_OPEN,
+        title: "Switch Codex Account",
+        category: "Plugin",
+        slashName: "switch-codex",
+        run: () => {
+          void openAccountsDialog(api);
+        },
       },
-    },
-  ]);
+    ],
+  });
+  api.lifecycle.onDispose(disposeCommands);
 };
 
 const module: TuiPluginModule & { id: string } = {
