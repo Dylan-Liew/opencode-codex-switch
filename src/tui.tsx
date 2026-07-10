@@ -3,7 +3,7 @@ import { spawn } from "child_process";
 import { MouseButton, RGBA, TextAttributes, type KeyEvent, type MouseEvent, type Renderable } from "@opentui/core";
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid";
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui";
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import { getAccountByID, readStore, removeAccount, setActiveAccount, syncCurrentAuth, writeStore } from "./store.ts";
 import type { AccountView, StoredAccount } from "./types.ts";
 import { getCurrentOpenAIOAuth, sameOAuthRecord } from "./utils/auth.ts";
@@ -150,7 +150,7 @@ function AddAccountAutoMethod(props: {
 }) {
   const theme = props.api.theme.current;
 
-  onMount(async () => {
+  void (async () => {
     const result = await props.api.client.provider.oauth.callback({
       providerID: "openai",
       method: props.methodIndex,
@@ -163,7 +163,7 @@ function AddAccountAutoMethod(props: {
     }
 
     await reopenAccountsDialog(props.api);
-  });
+  })();
 
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
@@ -322,16 +322,14 @@ function AccountsDialog(props: { api: TuiPluginApi }) {
     setSelectedIndex((current) => Math.max(0, Math.min(current, Math.max(0, result.length - 1))));
   };
 
-  onMount(() => {
-    void loadViews();
-    setTimeout(() => {
-      if (!root || root.isDestroyed) {
-        return;
-      }
+  void loadViews();
+  setTimeout(() => {
+    if (!root || root.isDestroyed) {
+      return;
+    }
 
-      root.focus();
-    }, 25);
-  });
+    root.focus();
+  }, 25);
 
   createEffect(() => {
     props.api.ui.dialog.setSize(dimensions().width >= 120 ? "large" : "medium");
@@ -590,20 +588,31 @@ async function openAccountsDialog(api: TuiPluginApi): Promise<void> {
 }
 
 const tui: TuiPlugin = async (api) => {
-  const disposeCommands = api.keymap.registerLayer({
-    commands: [
-      {
-        namespace: "palette",
-        name: ACCOUNT_COMMAND_OPEN,
-        title: "Switch Codex Account",
-        category: "Plugin",
-        slashName: "switch-codex",
-        run: () => {
-          void openAccountsDialog(api);
+  const disposeCommands = api.command
+    ? api.command.register(() => [
+        {
+          title: "Switch Codex Account",
+          value: ACCOUNT_COMMAND_OPEN,
+          category: "Plugin",
+          slash: { name: "switch-codex" },
+          onSelect: () => {
+            void openAccountsDialog(api);
+          },
         },
-      },
-    ],
-  });
+      ])
+    : api.keymap.registerLayer({
+        commands: [
+          {
+            namespace: "palette",
+            name: ACCOUNT_COMMAND_OPEN,
+            title: "Switch Codex Account",
+            category: "Plugin",
+            run: () => {
+              void openAccountsDialog(api);
+            },
+          },
+        ],
+      });
   api.lifecycle.onDispose(disposeCommands);
 };
 

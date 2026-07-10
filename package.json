@@ -1,6 +1,6 @@
 {
   "name": "opencode-codex-switch",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Opencode plugin for managing multiple Codex OAuth",
   "type": "module",
   "main": "./index.ts",
@@ -13,11 +13,12 @@
       "import": "./src/server.ts"
     },
     "./tui": {
-      "import": "./src/tui.tsx"
+      "import": "./dist/tui.js"
     }
   },
   "files": [
     "index.ts",
+    "dist",
     "src"
   ],
   "repository": {
@@ -39,15 +40,17 @@
   "author": "Dylan Liew",
   "license": "MIT",
   "scripts": {
+    "build": "bun ./scripts/build.ts",
     "test": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
-    "@opencode-ai/plugin": "^1.17.4",
-    "@opentui/core": "^0.3.4",
-    "@opentui/keymap": "^0.3.4",
-    "@opentui/solid": "^0.3.4",
+    "@opencode-ai/plugin": "latest",
+    "@opentui/core": "latest",
+    "@opentui/keymap": "latest",
+    "@opentui/solid": "latest",
     "@types/bun": "latest",
     "@types/node": "^24.3.0",
+    "solid-js": "1.9.12",
     "typescript": "^5.9.3"
   }
 }

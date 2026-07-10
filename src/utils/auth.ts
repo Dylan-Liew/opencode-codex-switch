@@ -11,19 +11,43 @@ export function getAuthJsonPath(): string {
   return join(getDataHome(), "opencode", "auth.json");
 }
 
+export function getCodexAuthJsonPath(): string {
+  return join(homedir(), ".codex", "auth.json");
+}
+
 export function getStorePath(): string {
   return join(getDataHome(), "opencode", "codex-switch.json");
 }
 
-export async function getRawAuthJson(): Promise<RawAuthJson> {
-  const path = getAuthJsonPath();
-
+async function readJsonObject(path: string): Promise<Record<string, unknown> | undefined> {
   try {
     const content = await readFile(path, "utf-8");
-    return JSON.parse(content) as RawAuthJson;
+    const parsed = JSON.parse(content) as unknown;
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : undefined;
   } catch {
-    return {};
+    return undefined;
   }
+}
+
+export async function getRawAuthJson(): Promise<RawAuthJson> {
+  return ((await readJsonObject(getAuthJsonPath())) as RawAuthJson | undefined) ?? {};
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value ? value : undefined;
+}
+
+function expiryValue(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+
+  return value < 1_000_000_000_000 ? value * 1000 : value;
+}
+
+function expiryFromAccessToken(access: string): number | undefined {
+  const payload = decodeJwtPayload(access);
+  return expiryValue(payload?.exp);
 }
 
 export function normalizeOAuthRecord(value: unknown): OAuthRecord | undefined {
@@ -51,9 +75,36 @@ export function normalizeOAuthRecord(value: unknown): OAuthRecord | undefined {
   };
 }
 
+function normalizeCodexOAuthRecord(value: unknown): OAuthRecord | undefined {
+  const candidate = value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
+  const tokens = candidate?.tokens && typeof candidate.tokens === "object" ? (candidate.tokens as Record<string, unknown>) : undefined;
+  if (!tokens) {
+    return undefined;
+  }
+
+  const access = stringValue(tokens.access_token);
+  const refresh = stringValue(tokens.refresh_token);
+  if (!access || !refresh) {
+    return undefined;
+  }
+
+  const expires = expiryValue(tokens.expires_at) ?? expiryValue(tokens.expires) ?? expiryFromAccessToken(access);
+  if (!expires) {
+    return undefined;
+  }
+
+  return {
+    type: "oauth",
+    access,
+    refresh,
+    expires,
+    accountId: stringValue(tokens.account_id),
+  };
+}
+
 export async function getCurrentOpenAIOAuth(): Promise<OAuthRecord | undefined> {
   const rawAuth = await getRawAuthJson();
-  return normalizeOAuthRecord(rawAuth.openai);
+  return normalizeOAuthRecord(rawAuth.openai) ?? normalizeCodexOAuthRecord(await readJsonObject(getCodexAuthJsonPath()));
 }
 
 export function sameOAuthRecord(left: OAuthRecord | undefined, right: OAuthRecord | undefined): boolean {
