@@ -1,6 +1,6 @@
 {
   "name": "opencode-codex-switch",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Opencode plugin for managing multiple Codex OAuth",
   "type": "module",
   "main": "./index.ts",
