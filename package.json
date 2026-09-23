@@ -1,6 +1,6 @@
 {
   "name": "opencode-codex-switch",
-  "version": "0.1.8",
+  "version": "1.0.0",
   "description": "Opencode plugin for managing multiple Codex OAuth",
   "type": "module",
   "main": "./index.ts",
@@ -18,6 +18,7 @@
   },
   "files": [
     "index.ts",
+    "tui.tsx",
     "dist",
     "src"
   ],
@@ -44,13 +45,22 @@
     "test": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
-    "@opencode-ai/plugin": "latest",
-    "@opentui/core": "latest",
-    "@opentui/keymap": "latest",
-    "@opentui/solid": "latest",
+    "@opencode/theme": "2.0.14",
+    "@opentui/core": "0.5.10",
+    "@opentui/solid": "0.5.10",
     "@types/bun": "latest",
     "@types/node": "^24.3.0",
     "solid-js": "1.9.12",
     "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@opencode/client": "^2.0.14",
+    "@opencode/plugin": "2.0.14",
+    "@opencode/schema": "^2.0.14"
+  },
+  "peerDependencies": {
+    "@opentui/core": ">=0.5.10",
+    "@opentui/solid": ">=0.5.10",
+    "solid-js": ">=1.9.0"
   }
 }

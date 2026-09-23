@@ -1,40 +1,47 @@
-import type { Hooks, PluginInput, PluginModule } from "@opencode-ai/plugin";
+import { Plugin } from "@opencode/plugin";
+import { Credential } from "@opencode/schema/credential";
+import { Rpc } from "@opencode/plugin/rpc";
+import { readStore } from "./store.ts";
+import { normalizeOAuthRecord } from "./utils/auth.ts";
 
-const PLUGIN_ID = "opencode-codex-switch";
-const ACCOUNT_COMMAND_OPEN = "plugin.codex-switch.open";
-const HANDLED_SENTINEL = "__CODEX_SWITCH_HANDLED__";
+export const accountRpc = Rpc.define({
+  id: "opencode-codex-switch",
+  methods: { active: { input: { type: "object", additionalProperties: false }, output: { type: ["string", "null"] } } },
+  events: {},
+});
 
-function isAccountCommand(command: string): boolean {
-  const normalized = command.replace(/^\//, "");
-  return normalized === "switch-codex";
-}
-
-export async function CodexSwitchPlugin(input: PluginInput): Promise<Hooks> {
-  const client = input.client;
-
-  return {
-    "command.execute.before": async (input, output) => {
-      if (!isAccountCommand(input.command)) {
-        return;
+export default Plugin.define({
+  id: "opencode-codex-switch",
+  async setup(ctx) {
+    await ctx.rpc.register(accountRpc, {
+      active: async () => {
+        const connection = await ctx.integration.connection.active("openai");
+        return connection?.type === "credential" ? connection.id : null;
+      },
+    });
+    // Offer saved V1 accounts as explicit imports; preserve the original store.
+    const store = await readStore();
+    await ctx.integration.transform((editor) => {
+      for (const account of store.accounts) {
+        const auth = normalizeOAuthRecord(account.auth);
+        if (!auth) continue;
+        editor.method.update({
+          integrationID: "openai",
+          method: { id: `codex-switch-import-${account.id}`, type: "oauth", label: `Import saved V1 account: ${account.email ?? auth.accountId ?? account.id}` },
+          authorize: async () => ({
+            mode: "auto",
+            url: "",
+            instructions: "Importing the selected saved account into OpenCode V2.",
+            callback: Promise.resolve(Credential.OAuth.make({
+              type: "oauth",
+              methodID: "chatgpt-browser" as Credential.OAuth["methodID"],
+              access: auth.access, refresh: auth.refresh, expires: auth.expires,
+              metadata: { ...(auth.accountId ? { accountID: auth.accountId } : {}) },
+            })),
+          }),
+          label: () => account.email ?? auth.accountId ?? "Imported Codex account",
+        });
       }
-
-      const result = await client.tui.executeCommand({
-        body: { command: ACCOUNT_COMMAND_OPEN },
-      });
-
-      if (result.error || result.data !== true) {
-        throw new Error("Codex account dialog unavailable. Ensure the TUI plugin is loaded.");
-      }
-
-      void output;
-      throw new Error(HANDLED_SENTINEL);
-    },
-  };
-}
-
-const module: PluginModule & { id: string } = {
-  id: PLUGIN_ID,
-  server: CodexSwitchPlugin,
-};
-
-export default module;
+    });
+  },
+});

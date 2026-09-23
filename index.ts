@@ -1,1 +1,1 @@
-export { CodexSwitchPlugin } from "./src/server.ts";
+export { default } from "./src/server.ts";
